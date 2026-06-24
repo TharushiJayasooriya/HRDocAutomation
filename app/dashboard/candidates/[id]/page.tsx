@@ -174,13 +174,23 @@ export default function CandidateDetailPage() {
               {candidate.documents.map((doc: any) => (
                 <li key={doc.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                   <span className="text-sm text-gray-700">{doc.documentType}</span>
-                  <a
-                    href={doc.fileUrl}
-                    download={`${doc.documentType}-${candidate.fullName}.pdf`}
-                    className="text-blue-600 text-sm hover:underline"
-                  >
-                    Download
-                  </a>
+                  <button
+                onClick={async () => {
+                const response = await fetch(doc.fileUrl)
+                const blob = await response.blob()
+                const url = window.URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `${doc.documentType}-${candidate.fullName}.pdf`
+                document.body.appendChild(a)
+                a.click()
+               window.URL.revokeObjectURL(url)
+               document.body.removeChild(a)
+            }}
+            className="text-blue-600 text-sm hover:underline"
+>
+            Download
+            </button>
                 </li>
               ))}
             </ul>

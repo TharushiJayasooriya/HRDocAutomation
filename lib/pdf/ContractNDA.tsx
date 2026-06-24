@@ -28,7 +28,10 @@ export function ContractNDAPDF({ candidateName, position, letterDate, endDate }:
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, borderBottomWidth: 1, borderBottomColor: '#ffffff', paddingBottom: 10 }}>
-          <Image style={styles.logo} src="/KnightOwl_Logo.jpeg" />
+          <Image
+           src={`${process.cwd()}/public/KnightOwl_Logo.jpeg`}
+           style={styles.logo}
+          />
           <Text style={styles.companyName}>KNIGHT OWL</Text>
         </View>
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { renderToBuffer } from '@react-pdf/renderer'
 import { prisma } from '@/lib/db'
 import React from 'react'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 
 // Intern templates
 import { OfferLetterPDF } from '@/lib/pdf/OfferLetter'
@@ -17,6 +18,26 @@ import { FullTimeNDAPDF } from '@/lib/pdf/FullTimeNDA'
 import { ContractOfferLetterPDF } from '@/lib/pdf/ContractOfferLetter'
 import { ContractAgreementPDF } from '@/lib/pdf/ContractAgreement'
 import { ContractNDAPDF } from '@/lib/pdf/ContractNDA'
+
+const s3Client = new S3Client({ region: process.env.AWS_REGION })
+
+async function uploadToS3(buffer: Buffer, key: string): Promise<string> {
+  const bucketName = process.env.S3_BUCKET_NAME || process.env.AWS_S3_BUCKET || process.env.AWS_BUCKET
+  if (!bucketName) {
+    throw new Error('S3 bucket name not configured')
+  }
+
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+      Body: buffer,
+      ContentType: 'application/pdf',
+    })
+  )
+
+  return `https://${bucketName}.s3.amazonaws.com/${encodeURIComponent(key)}`
+}
 
 export async function POST(req: Request) {
   try {
@@ -48,6 +69,7 @@ export async function POST(req: Request) {
     const formattedStart = formatDate(startDate)
     const formattedEnd = formatDate(endDate)
 
+    const sanitizedName = candidate.fullName.replace(/\s+/g, '_')
     let documentsToCreate: {
       candidateId: string
       documentType: string
@@ -55,7 +77,7 @@ export async function POST(req: Request) {
     }[] = []
 
     if (candidate.employmentType === 'Intern') {
-      const offerBuffer = await renderToBuffer(
+      const offerBuffer = Buffer.from(await renderToBuffer(
         React.createElement(OfferLetterPDF, {
           candidateName: candidate.fullName,
           candidateAddress: 'Sri Lanka',
@@ -65,17 +87,17 @@ export async function POST(req: Request) {
           companyRepName: candidate.companyRepName,
           letterDate,
         }) as React.ReactElement<any>
-      )
+      ))
 
-      const ndaBuffer = await renderToBuffer(
+      const ndaBuffer = Buffer.from(await renderToBuffer(
         React.createElement(NDAPDF, {
           candidateName: candidate.fullName,
           position: candidate.position,
           letterDate,
         }) as React.ReactElement<any>
-      )
+      ))
 
-      const agreementBuffer = await renderToBuffer(
+      const agreementBuffer = Buffer.from(await renderToBuffer(
         React.createElement(InternshipAgreementPDF, {
           candidateName: candidate.fullName,
           position: candidate.position,
@@ -85,28 +107,22 @@ export async function POST(req: Request) {
           companyRepName: candidate.companyRepName,
           letterDate,
         }) as React.ReactElement<any>
-      )
+      ))
+
+      const [offerUrl, ndaUrl, agreementUrl] = await Promise.all([
+        uploadToS3(offerBuffer, `${sanitizedName}/Internship_Offer_Letter.pdf`),
+        uploadToS3(ndaBuffer, `${sanitizedName}/Intern_NDA.pdf`),
+        uploadToS3(agreementBuffer, `${sanitizedName}/Internship_Agreement.pdf`),
+      ])
 
       documentsToCreate = [
-        {
-          candidateId,
-          documentType: 'Internship Offer Letter',
-          fileUrl: `data:application/pdf;base64,${Buffer.from(offerBuffer).toString('base64')}`,
-        },
-        {
-          candidateId,
-          documentType: 'Intern NDA',
-          fileUrl: `data:application/pdf;base64,${Buffer.from(ndaBuffer).toString('base64')}`,
-        },
-        {
-          candidateId,
-          documentType: 'Internship Agreement',
-          fileUrl: `data:application/pdf;base64,${Buffer.from(agreementBuffer).toString('base64')}`,
-        },
+        { candidateId, documentType: 'Internship Offer Letter', fileUrl: offerUrl },
+        { candidateId, documentType: 'Intern NDA', fileUrl: ndaUrl },
+        { candidateId, documentType: 'Internship Agreement', fileUrl: agreementUrl },
       ]
 
     } else if (candidate.employmentType === 'Full-Time') {
-      const offerBuffer = await renderToBuffer(
+      const offerBuffer = Buffer.from(await renderToBuffer(
         React.createElement(FullTimeOfferLetterPDF, {
           candidateName: candidate.fullName,
           position: candidate.position,
@@ -116,9 +132,9 @@ export async function POST(req: Request) {
           letterDate,
           department: candidate.department,
         }) as React.ReactElement<any>
-      )
+      ))
 
-      const agreementBuffer = await renderToBuffer(
+      const agreementBuffer = Buffer.from(await renderToBuffer(
         React.createElement(FullTimeAgreementPDF, {
           candidateName: candidate.fullName,
           position: candidate.position,
@@ -128,36 +144,30 @@ export async function POST(req: Request) {
           letterDate,
           department: candidate.department,
         }) as React.ReactElement<any>
-      )
+      ))
 
-      const ndaBuffer = await renderToBuffer(
+      const ndaBuffer = Buffer.from(await renderToBuffer(
         React.createElement(FullTimeNDAPDF, {
           candidateName: candidate.fullName,
           position: candidate.position,
           letterDate,
         }) as React.ReactElement<any>
-      )
+      ))
+
+      const [offerUrl, agreementUrl, ndaUrl] = await Promise.all([
+        uploadToS3(offerBuffer, `${sanitizedName}/Employment_Offer_Letter.pdf`),
+        uploadToS3(agreementBuffer, `${sanitizedName}/Employment_Agreement.pdf`),
+        uploadToS3(ndaBuffer, `${sanitizedName}/Employee_NDA.pdf`),
+      ])
 
       documentsToCreate = [
-        {
-          candidateId,
-          documentType: 'Employment Offer Letter',
-          fileUrl: `data:application/pdf;base64,${Buffer.from(offerBuffer).toString('base64')}`,
-        },
-        {
-          candidateId,
-          documentType: 'Employment Agreement',
-          fileUrl: `data:application/pdf;base64,${Buffer.from(agreementBuffer).toString('base64')}`,
-        },
-        {
-          candidateId,
-          documentType: 'Employee NDA',
-          fileUrl: `data:application/pdf;base64,${Buffer.from(ndaBuffer).toString('base64')}`,
-        },
+        { candidateId, documentType: 'Employment Offer Letter', fileUrl: offerUrl },
+        { candidateId, documentType: 'Employment Agreement', fileUrl: agreementUrl },
+        { candidateId, documentType: 'Employee NDA', fileUrl: ndaUrl },
       ]
 
     } else if (candidate.employmentType === 'Contract') {
-      const offerBuffer = await renderToBuffer(
+      const offerBuffer = Buffer.from(await renderToBuffer(
         React.createElement(ContractOfferLetterPDF, {
           candidateName: candidate.fullName,
           position: candidate.position,
@@ -168,9 +178,9 @@ export async function POST(req: Request) {
           letterDate,
           department: candidate.department,
         }) as React.ReactElement<any>
-      )
+      ))
 
-      const agreementBuffer = await renderToBuffer(
+      const agreementBuffer = Buffer.from(await renderToBuffer(
         React.createElement(ContractAgreementPDF, {
           candidateName: candidate.fullName,
           position: candidate.position,
@@ -181,33 +191,27 @@ export async function POST(req: Request) {
           letterDate,
           department: candidate.department,
         }) as React.ReactElement<any>
-      )
+      ))
 
-      const ndaBuffer = await renderToBuffer(
+      const ndaBuffer = Buffer.from(await renderToBuffer(
         React.createElement(ContractNDAPDF, {
           candidateName: candidate.fullName,
           position: candidate.position,
           letterDate,
           endDate: formattedEnd,
         }) as React.ReactElement<any>
-      )
+      ))
+
+      const [offerUrl, agreementUrl, ndaUrl] = await Promise.all([
+        uploadToS3(offerBuffer, `${sanitizedName}/Contract_Offer_Letter.pdf`),
+        uploadToS3(agreementBuffer, `${sanitizedName}/Contract_Agreement.pdf`),
+        uploadToS3(ndaBuffer, `${sanitizedName}/Contractor_NDA.pdf`),
+      ])
 
       documentsToCreate = [
-        {
-          candidateId,
-          documentType: 'Contract Offer Letter',
-          fileUrl: `data:application/pdf;base64,${Buffer.from(offerBuffer).toString('base64')}`,
-        },
-        {
-          candidateId,
-          documentType: 'Contract Agreement',
-          fileUrl: `data:application/pdf;base64,${Buffer.from(agreementBuffer).toString('base64')}`,
-        },
-        {
-          candidateId,
-          documentType: 'Contractor NDA',
-          fileUrl: `data:application/pdf;base64,${Buffer.from(ndaBuffer).toString('base64')}`,
-        },
+        { candidateId, documentType: 'Contract Offer Letter', fileUrl: offerUrl },
+        { candidateId, documentType: 'Contract Agreement', fileUrl: agreementUrl },
+        { candidateId, documentType: 'Contractor NDA', fileUrl: ndaUrl },
       ]
     }
 
