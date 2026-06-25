@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 
 interface Candidate {
   id: string
@@ -18,7 +17,6 @@ interface Candidate {
 }
 
 export default function CandidatesPage() {
-  const router = useRouter()
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -36,7 +34,6 @@ export default function CandidatesPage() {
 
   async function handleDelete(id: string) {
     if (!confirm('Are you sure you want to delete this candidate?')) return
-
     await fetch(`/api/candidates/${id}`, { method: 'DELETE' })
     fetchCandidates()
   }
@@ -48,7 +45,6 @@ export default function CandidatesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Navbar */}
       <nav className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <h1 className="text-xl font-bold text-gray-900">HR Document Portal</h1>
@@ -59,7 +55,6 @@ export default function CandidatesPage() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">Candidates</h2>
           <Link
@@ -70,7 +65,6 @@ export default function CandidatesPage() {
           </Link>
         </div>
 
-        {/* Search */}
         <div className="mb-4">
           <input
             type="text"
@@ -81,7 +75,6 @@ export default function CandidatesPage() {
           />
         </div>
 
-        {/* Table */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           {loading ? (
             <p className="text-center text-gray-500 py-8">Loading...</p>

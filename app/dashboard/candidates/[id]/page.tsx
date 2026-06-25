@@ -26,6 +26,7 @@ export default function CandidateDetailPage() {
   const [candidate, setCandidate] = useState<Candidate | null>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [sending, setSending] = useState(false)
 
   async function fetchCandidate() {
     const res = await fetch(`/api/candidates/${id}`)
@@ -58,6 +59,30 @@ export default function CandidateDetailPage() {
       alert('Failed to generate documents')
     } finally {
       setGenerating(false)
+    }
+  }
+
+  async function handleSendEmail() {
+    if (!candidate) return
+    setSending(true)
+    try {
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidateId: candidate.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        alert('Failed to send email: ' + (data?.error ?? res.statusText))
+        return
+      }
+      alert('Documents sent successfully!')
+      fetchCandidate()
+    } catch (error) {
+      console.error(error)
+      alert('Failed to send email')
+    } finally {
+      setSending(false)
     }
   }
 
@@ -102,6 +127,7 @@ export default function CandidateDetailPage() {
           </Link>
         </div>
 
+        {/* Candidate Info */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Candidate Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -156,16 +182,26 @@ export default function CandidateDetailPage() {
           </div>
         </div>
 
+        {/* Documents Section */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Generated Documents</h3>
-            <button
-              onClick={handleGenerate}
-              disabled={generating}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50"
-            >
-              {generating ? 'Generating...' : 'Generate Documents'}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleGenerate}
+                disabled={generating}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50"
+              >
+                {generating ? 'Generating...' : 'Generate Documents'}
+              </button>
+              <button
+                onClick={handleSendEmail}
+                disabled={sending || (candidate.documents?.length ?? 0) === 0}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition disabled:opacity-50"
+              >
+                {sending ? 'Sending...' : 'Send Documents'}
+              </button>
+            </div>
           </div>
           {(candidate.documents?.length ?? 0) === 0 ? (
             <p className="text-gray-500 text-sm">No documents generated yet. Click Generate Documents to create them.</p>
@@ -175,28 +211,29 @@ export default function CandidateDetailPage() {
                 <li key={doc.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                   <span className="text-sm text-gray-700">{doc.documentType}</span>
                   <button
-                onClick={async () => {
-                const response = await fetch(doc.fileUrl)
-                const blob = await response.blob()
-                const url = window.URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = `${doc.documentType}-${candidate.fullName}.pdf`
-                document.body.appendChild(a)
-                a.click()
-               window.URL.revokeObjectURL(url)
-               document.body.removeChild(a)
-            }}
-            className="text-blue-600 text-sm hover:underline"
->
-            Download
-            </button>
+                    onClick={async () => {
+                      const response = await fetch(doc.fileUrl)
+                      const blob = await response.blob()
+                      const url = window.URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `${doc.documentType}-${candidate.fullName}.pdf`
+                      document.body.appendChild(a)
+                      a.click()
+                      window.URL.revokeObjectURL(url)
+                      document.body.removeChild(a)
+                    }}
+                    className="text-blue-600 text-sm hover:underline"
+                  >
+                    Download
+                  </button>
                 </li>
               ))}
             </ul>
           )}
         </div>
 
+        {/* Email Status */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Email Status</h3>
           {(candidate.emailLogs?.length ?? 0) === 0 ? (
